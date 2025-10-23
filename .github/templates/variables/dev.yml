@@ -1,0 +1,16 @@
+variable:
+  - name: subscriptionId
+    value: '00000000-0000-0000-0000-000000000000'
+  - name: resourceGroup
+    value: 'rg-bicep-dev'
+  - name: location
+    value: 'southafricanorth'
+  - name: serviceConnection
+    value: 'sp-demo-dev-001'
+  - name: ManagedIdentityEnabled
+    value: true
+  - name: ManagedIdentityName
+    value: 'mi-bicep-dev'
+  - name: StorageAccountName
+    value: 'stbicepdev001'
+  

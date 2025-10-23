@@ -1,0 +1,24 @@
+parameters: 
+  - name: Environment
+    type: string
+    default: 'dev'
+
+# Use when testing .NET projects, adjust as needed for other tech stacks
+variables:
+  - name: testCommand
+    value: 'dotnet test'
+
+stages: 
+# Step 3.1: Run any unit tests (non-negiotable)
+  - stage: ValidateAngulatCodebase
+    displayName: 'Run Angular Unit Tests'
+    jobs:
+      - template: .azuredevops/templates/steps/run-angular-unit-tests.yml
+        displayName: 'Run Angular Unit Tests'
+
+# Step 3.2: Run Infrastructure as Code (IaC) validation (non-negiotable)
+  - stage: ValidateNetCodebase
+    displayName: 'Run .NET Unit Tests'
+    jobs:
+      - template: .azuredevops/templates/steps/run-dot-net-unit-tests.yml
+        displayName: 'Run .NET Unit Tests'

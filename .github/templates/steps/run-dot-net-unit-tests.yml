@@ -1,0 +1,106 @@
+parameters:
+  dotnetVersion: '8.0.x'           
+  workingDirectory: './src'   
+  testResultsFolder: 'TestResults'
+  coverageFolder: 'coverage'
+  buildConfiguration: 'Release'
+  collectCoverage: true
+  failOnTestFailures: true
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Use .NET SDK ${{ parameters.dotnetVersion }}'
+    inputs:
+      packageType: 'sdk'
+      version: '${{ parameters.dotnetVersion }}'
+
+  - pwsh: |
+      Write-Host "Working directory: $env:BUILD_SOURCESDIRECTORY\${{ parameters.workingDirectory }}"
+      Push-Location "$env:BUILD_SOURCESDIRECTORY\${{ parameters.workingDirectory }}"
+
+      # Ensure pipeline workspace exists so we can write an exit marker
+      New-Item -ItemType Directory -Force -Path "$env:PIPELINE_WORKSPACE" | Out-Null
+
+      $resultsDir = Join-Path $env:BUILD_SOURCESDIRECTORY "\${{ parameters.workingDirectory }}\${{ parameters.testResultsFolder }}"
+      New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+
+      $dotnetArgs = "--configuration ${{ parameters.buildConfiguration }} --logger \"trx;LogFileName=test-results.trx\" --results-directory `"$resultsDir`""
+      if (${{ parameters.collectCoverage }}) {
+        $dotnetArgs += " --collect:`"XPlat Code Coverage`""
+      }
+
+      Write-Host "Running: dotnet test $dotnetArgs"
+      dotnet test $dotnetArgs
+      if ($LASTEXITCODE -ne 0) {
+        "__TEST_RUN_FAILED__:$LASTEXITCODE" | Out-File -FilePath "$env:PIPELINE_WORKSPACE/test-exit-code.txt" -Encoding utf8
+      }
+
+      Pop-Location
+    displayName: 'Run dotnet test (with optional coverage)'
+    env:
+      CI: true
+
+  - pwsh: |
+      Write-Host "Collecting coverage/trx files into ${ { parameters.testResultsFolder } } and ${ { parameters.coverageFolder } } (no-op if already in place)."
+      $src = Join-Path $env:BUILD_SOURCESDIRECTORY "\${{ parameters.workingDirectory }}"
+      $destResults = Join-Path $src "\${{ parameters.testResultsFolder }}"
+      $destCoverage = Join-Path $src "\${{ parameters.coverageFolder }}"
+
+      # Find TRX files produced by dotnet test
+      Get-ChildItem -Path $src -Recurse -Filter *.trx -ErrorAction SilentlyContinue |
+        ForEach-Object {
+          $target = Join-Path $destResults ($_.FullName.Substring($src.Length).TrimStart('\','/'))
+          New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+          Copy-Item -Force $_.FullName -Destination $target
+        }
+
+      # Find cobertura coverage files produced by XPlat collector: coverage.cobertura.xml
+      Get-ChildItem -Path $src -Recurse -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue |
+        ForEach-Object {
+          $relative = $_.FullName.Substring($src.Length).TrimStart('\','/')
+          $target = Join-Path $destCoverage $relative
+          New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+          Copy-Item -Force $_.FullName -Destination $target
+        }
+
+      Write-Host "Collection complete."
+    displayName: 'Collect test results and coverage'
+    condition: always()
+
+  - task: PublishTestResults@2
+    displayName: 'Publish test results (VSTest/TRX)'
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.testResultsFolder }}/**/*.trx'
+      searchFolder: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}'
+      failTaskOnFailedTests: ${{ parameters.failOnTestFailures }}
+      testRunTitle: '.NET unit tests'
+
+  - task: PublishCodeCoverageResults@1
+    displayName: 'Publish code coverage (Cobertura)'
+    inputs:
+      codeCoverageTool: 'Cobertura'
+      # we collected coverage.cobertura.xml into the coverage folder above (preserves relative path)
+      summaryFileLocation: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.coverageFolder }}/**/coverage.cobertura.xml'
+      reportDirectory: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.coverageFolder }}'
+    condition: always()
+
+  - pwsh: |
+      if (Test-Path "$env:PIPELINE_WORKSPACE/test-exit-code.txt") {
+        $line = Get-Content "$env:PIPELINE_WORKSPACE/test-exit-code.txt" -ErrorAction SilentlyContinue
+        if ($line -match '__TEST_RUN_FAILED__:(\d+)') {
+          $code = [int]$matches[1]
+          Write-Host "Tests exited with code $code"
+          $fail = "${{ parameters.failOnTestFailures }}".ToLower()
+          if ($fail -eq 'true') {
+            Write-Error "Failing pipeline because failOnTestFailures is true and tests failed."
+            exit $code
+          } else {
+            Write-Host "Tests failed but failOnTestFailures is false; continuing."
+          }
+        }
+      } else {
+        Write-Host "No test-exit-code marker found; assuming tests passed."
+      }
+    displayName: 'Fail pipeline on test failures (if configured)'
+    condition: always()

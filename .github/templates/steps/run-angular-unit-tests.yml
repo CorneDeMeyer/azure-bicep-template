@@ -1,0 +1,111 @@
+variables:
+  nodeVersion: '16.x'
+  workingDirectory: '.'  # relative to repo root where package.json is located; override when calling the template
+  testResultsFolder: 'test-results'
+  coverageFolder: 'coverage'
+  failOnTestFailures: true
+
+steps:
+  - task: NodeTool@0
+    displayName: 'Use Node.js ${{ parameters.nodeVersion }}'
+    inputs:
+      versionSpec: '${{ parameters.nodeVersion }}'
+
+  - script: |
+      set -e
+      echo "Working directory: ${{ parameters.workingDirectory }}"
+      cd "$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}"
+      echo "Installing npm dependencies (CI)..."
+      npm ci
+    displayName: 'Install dependencies (npm ci)'
+    shell: bash
+
+  - script: |
+      echo "Running Angular unit tests (CI, headless)..."
+      cd "$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}"
+
+      # Ensure pipeline workspace exists so we can write an exit marker
+      mkdir -p "$(Pipeline.Workspace)"
+
+      # Run tests, capture exit code but continue so we can publish results/coverage
+      npm run test -- --watch=false --browsers=ChromeHeadless --code-coverage || echo "__TEST_RUN_FAILED__:$?" > "$(Pipeline.Workspace)/test-exit-code.txt"
+    displayName: 'Run Angular unit tests'
+    env:
+      CI: true
+    shell: bash
+
+  - script: |
+      echo "Preparing test results folder..."
+      SRC_DIR="$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}"
+      mkdir -p "$SRC_DIR/${{ parameters.testResultsFolder }}"
+
+      # Find any junit xml files produced by Karma or custom reporters
+      # Ensure -type f applies to all -name patterns by grouping them with parentheses
+      found=$(find "$SRC_DIR" -type f \( -name '*.xml' -o -name 'junit*.xml' -o -name 'test-results*.xml' \) 2>/dev/null || true)
+      if [ -n "$found" ]; then
+        echo "Found xml test result files, copying to test-results folder..."
+        # cp --parents is GNU-specific; this will work on typical Linux agents. Replace if using non-GNU platforms.
+        find "$SRC_DIR" -type f \( -name '*.xml' -o -name 'junit*.xml' -o -name 'test-results*.xml' \) -exec cp --parents '{}' "$SRC_DIR/${{ parameters.testResultsFolder }}" \; || true
+      else
+        echo "No junit xml test results found. Creating placeholder to avoid 'no tests' message."
+        mkdir -p "$SRC_DIR/${{ parameters.testResultsFolder }}"
+        TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        cat > "$SRC_DIR/${{ parameters.testResultsFolder }}/junit-placeholder.xml" <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <testsuites>
+          <testsuite name="Placeholder" tests="0" failures="0" errors="0" skipped="0" timestamp="${TIMESTAMP}">
+          </testsuite>
+        </testsuites>
+        EOF
+      fi
+
+      # Move any lcov.info to a central coverage folder for publish task
+      if [ -f "$SRC_DIR/lcov.info" ]; then
+        mkdir -p "$SRC_DIR/${{ parameters.coverageFolder }}"
+        cp "$SRC_DIR/lcov.info" "$SRC_DIR/${{ parameters.coverageFolder }}/lcov.info" || true
+      else
+        # try common coverage locations (maxdepth optional)
+        find "$SRC_DIR" -name 'lcov.info' -maxdepth 4 -exec sh -c 'mkdir -p "$0/${1%/*}" && cp "$1" "$0/${1%/*}/"' "$SRC_DIR" '{}' \; || true
+      fi
+
+      echo "Test results prepared."
+    displayName: 'Collect test results and coverage'
+    shell: bash
+
+  - task: PublishTestResults@2
+    displayName: 'Publish test results (JUnit)'
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.testResultsFolder }}/**/*.xml'
+      searchFolder: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}'
+      failTaskOnFailedTests: ${{ parameters.failOnTestFailures }}
+      testRunTitle: 'Angular unit tests'
+
+  - task: PublishCodeCoverageResults@1
+    displayName: 'Publish code coverage (lcov)'
+    inputs:
+      codeCoverageTool: 'lcov'
+      summaryFileLocation: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.coverageFolder }}/lcov.info'
+      reportDirectory: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}/${{ parameters.coverageFolder }}'
+    condition: always()
+
+  - script: |
+      # If tests failed (we stored exit code), fail the job if requested
+      if [ -f "$(Pipeline.Workspace)/test-exit-code.txt" ]; then
+        CODELINE=$(cat "$(Pipeline.Workspace)/test-exit-code.txt" || true)
+        if echo "$CODELINE" | grep -q '__TEST_RUN_FAILED__:'; then
+          CODE=$(echo "$CODELINE" | sed 's/.*__TEST_RUN_FAILED__://')
+          echo "Tests exited with code $CODE"
+          if [ "${{ parameters.failOnTestFailures }}" = "true" ]; then
+            echo "Failing pipeline because failOnTestFailures is true and tests failed."
+            exit $CODE
+          else
+            echo "Tests failed but failOnTestFailures is false; continuing."
+          fi
+        fi
+      else
+        echo "No test-exit-code marker found; assuming tests passed."
+      fi
+    displayName: 'Fail pipeline on test failures (if configured)'
+    condition: always()
+    shell: bash
