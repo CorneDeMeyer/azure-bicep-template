@@ -41,6 +41,7 @@ stages:
       - template: .azuredevops/templates/stages/validate-codebase.yml
         parameters:
           Environment: dev
+          validateAngularCodeBase: false
 
   # Step 3: Build Solution
   - stage: BuildSolution

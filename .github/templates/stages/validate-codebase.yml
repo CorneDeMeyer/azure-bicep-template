@@ -2,6 +2,9 @@ parameters:
   - name: Environment
     type: string
     default: 'dev'
+  - name: validateAngularCodeBase
+    type: boolean
+    default: false
 
 # Use when testing .NET projects, adjust as needed for other tech stacks
 variables:
@@ -10,11 +13,12 @@ variables:
 
 stages: 
 # Step 3.1: Run any unit tests (non-negiotable)
-  - stage: ValidateAngulatCodebase
-    displayName: 'Run Angular Unit Tests'
-    jobs:
-      - template: .azuredevops/templates/steps/run-angular-unit-tests.yml
-        displayName: 'Run Angular Unit Tests'
+  - {{ if parameters.validateAngularCodeBase }}
+    - stage: ValidateAngulatCodebase
+      displayName: 'Run Angular Unit Tests'
+      jobs:
+        - template: .azuredevops/templates/steps/run-angular-unit-tests.yml
+          displayName: 'Run Angular Unit Tests'
 
 # Step 3.2: Run Infrastructure as Code (IaC) validation (non-negiotable)
   - stage: ValidateNetCodebase

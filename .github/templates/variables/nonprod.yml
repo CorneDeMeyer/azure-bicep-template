@@ -14,3 +14,6 @@ variable:
   - name: StorageAccountName
     value: 'stbicepnonprod001'
   
+  # Angluar Variables
+  - name: canDeployAngularApp
+    value: false

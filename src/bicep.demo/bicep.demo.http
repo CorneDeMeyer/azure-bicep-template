@@ -1,0 +1,6 @@
+@bicep.demo_HostAddress = http://localhost:5054
+
+GET {{bicep.demo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

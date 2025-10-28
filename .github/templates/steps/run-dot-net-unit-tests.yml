@@ -1,6 +1,6 @@
 parameters:
-  dotnetVersion: '8.0.x'           
-  workingDirectory: './src'   
+  dotnetVersion: '9.0.0'           
+  workingDirectory: './src/bicep.demo.utests'   
   testResultsFolder: 'TestResults'
   coverageFolder: 'coverage'
   buildConfiguration: 'Release'

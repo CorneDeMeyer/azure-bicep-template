@@ -13,4 +13,8 @@ variable:
     value: 'mi-bicep-dev'
   - name: StorageAccountName
     value: 'stbicepdev001'
+
+  # Angluar Variables
+  - name: canDeployAngularApp
+    value: false
   
