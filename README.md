@@ -47,9 +47,10 @@ The `.azuredevops` or `.github` directory contains the pipeline configurations f
 ## Getting Started
 
 1.  **Prerequisites:**
-    -   Azure subscription
+    -   Azure Subscription
     -   Azure DevOps organization
     -   Basic understanding of Azure and Infrastructure as Code concepts
+    -   Azure Service Principle (One per environment, set as owner within resource group)
 2.  **Clone the Repository:**
 
     ```bash
@@ -89,7 +90,7 @@ Here are some suggested exercises to get you started:
 
 ## References
 - `Azure Naming Rules`: https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-name-rules
-- 
+- `Azure Bicep Modules`: https://learn.microsoft.com/en-us/azure/templates 
 
 ## License
 
