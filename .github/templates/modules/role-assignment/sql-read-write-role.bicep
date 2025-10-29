@@ -22,10 +22,8 @@ resource sqlRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
         actions: [
           'Microsoft.Sql/servers/read'
           'Microsoft.Sql/servers/write'
-          'Microsoft.Sql/servers/delete'
           'Microsoft.Sql/servers/databases/read'
           'Microsoft.Sql/servers/databases/write'
-          'Microsoft.Sql/servers/databases/delete'
           'Microsoft.Sql/servers/firewallRules/*'
         ]
         notActions: []
