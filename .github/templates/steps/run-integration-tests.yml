@@ -1,0 +1,27 @@
+parameters:
+  dotnetVersion: '9.0.0'
+
+steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ parameters.dotnetVersion }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    
+    - name: Run Integration Tests with Coverage
+      run: |
+        dotnet test ./src/bicep.demo.itests/bicep.demo.itests.csproj \
+          /p:CollectCoverage=true \
+          /p:CoverletOutputFormat=cobertura \
+          /p:Threshold=80 \
+          /p:ThresholdType=line \
+          /p:ThresholdStat=total
+
+
+

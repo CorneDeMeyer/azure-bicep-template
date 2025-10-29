@@ -1,0 +1,10 @@
+# Pre-commit hooks for Azure Bicep validation, with built-in support for GitHub Workflows, Azure Pipelines
+# https://github.com/Azure4DevOps/check-azure-bicep
+build:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Execute pre-commit
+      run: |
+        pip install pre-commit
+        pre-commit --version
+        pre-commit run --all-files

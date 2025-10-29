@@ -1,0 +1,15 @@
+parameters:
+  - name: environment
+    type: string
+  - name: apiName
+    type: string
+
+variables:
+  healthCheckUrl: http://{{ parameters.apiName }}:80/healthz
+
+jobs:
+  - name: run-health-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Health Checks for ${{ parameters.apiName }} in ${{ parameters.environment }} Environment
+        run: curl --fail --silent {{ variables.healthCheckUrl }} || exit 1

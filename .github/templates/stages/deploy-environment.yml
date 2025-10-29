@@ -1,0 +1,76 @@
+parameters:
+  - name: Environment
+    type: string
+  - name: buildConfiguration
+    type: string
+  - name: artifactName
+    type: string
+  - name: timeoutMinutes
+    type: number
+
+# Load Environment Variables
+variables:
+  - template: ../variables/${{ parameters.Environment }}.yml
+    parameters:
+      Environment: ${{ parameters.Environment }}
+
+jobs:
+# Step 4: Deploy Infrastructure
+  - job: DeployInfrastructure
+    displayName: 'Deploy Infrastructure to $(Environment)'
+    steps:
+      - template: ../steps/deploy-infra.yml
+        parameters:
+          Environment: ${{ parameters.Environment }}
+          resourceGroupName: ${{ variables.resourceGroup }}
+          ManagedIdentityName: ${{ variables.ManagedIdentityName }}
+          StorageAccountName: ${{ variables.StorageAccountName }}
+
+# Step 5: Deploy Application/s (For Function apps)
+  # - job: DeployApplication
+  #   displayName: 'Deploy Application to $(Environment)'
+  #   dependsOn: DeployInfrastructure
+  #   steps:
+  #     - template: ../steps/deploy-application.yml
+  #       parameters:
+  #         Environment: ${{ parameters.Environment }}
+
+# Step 6: Health and/or Integration Tests (non-negiotable)
+  - job: HealthTests
+    displayName: Health Tests
+    dependsOn:
+      - DeployInfra
+      - DeployApp
+    # only run if both upstream jobs succeeded
+    condition: and(succeeded('DeployInfra'), succeeded('DeployApp'))
+    steps:
+      - template: ../steps/run-health-tests.yml
+        parameters:
+          Environment: ${{ parameters.Environment }}
+
+  - job: IntegrationTests
+    displayName: Integration Tests
+    dependsOn:
+      - DeployInfra
+      - DeployApp
+    condition: and(succeeded('DeployInfra'), succeeded('DeployApp'))
+    steps:
+      - template: ../steps/run-integration-tests.yml
+        parameters:
+          Environment: ${{ parameters.Environment }}
+
+# Step 7: Blue / Green switch over (if applicable)
+  - job: BlueGreenSwitch
+    displayName: Blue/Green Switch Over
+    dependsOn:
+      - DeployInfra
+      - DeployApp
+      - HealthTests
+      - IntegrationTests
+    condition: and(succeeded(), always()) # all previous jobs must succeed
+    steps:
+      - script: |
+          echo "Performing Blue/Green switch over in ${{ parameters.Environment }} environment..."
+        displayName: 'Blue/Green Switch Over'
+        env:
+          ENVIRONMENT: ${{ parameters.Environment }}

@@ -1,0 +1,19 @@
+variable:
+  - name: subscriptionId
+    value: '00000000-0000-0000-0000-000000000000'
+  - name: resourceGroup
+    value: 'rg-bicep-prod'
+  - name: location
+    value: 'southafricanorth'
+  - name: serviceConnection
+    value: 'sp-demo-prod-001'
+  - name: ManagedIdentityEnabled
+    value: true
+  - name: ManagedIdentityName
+    value: 'mi-bicep-prod'
+  - name: StorageAccountName
+    value: 'stbicepprod001'
+  
+  # Angluar Variables
+  - name: canDeployAngularApp
+    value: false
