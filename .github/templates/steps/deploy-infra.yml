@@ -1,0 +1,69 @@
+parameters:
+  - name: Environment
+    type: string
+  - name: resourceGroupName
+    type: string
+  - name: ManagedIdentityName
+    type: string
+  - name: StorageAccountName
+    type: string
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+    steps:
+      
+      - name: DeployManagedIdentityBicep
+        uses: azure/arm-deploy@v1
+        with:
+          scope: resourceGroup
+          resourceGroupName: parameters.resourceGroupName
+          deploymentName: "managed-identity-${{ parameters.Environment }}"
+          template: ../modules/managed-identity/main.bicep
+          parameters: 
+            environment: ${{ parameters.Environment }}
+            identityName: ${{ parameters.ManagedIdentityName}}
+            # location can be added here if needed, but defaults to resource group location
+
+      - name: DeployStorageAccountBicep
+        uses: azure/arm-deploy@v1
+        with:
+          scope: resourceGroup
+          resourceGroupName: parameters.resourceGroupName
+          deploymentName: "storage-account-${{ parameters.Environment }}"
+          template: ../modules/storage-account/main.bicep
+          parameters: 
+            environment: ${{ parameters.Environment }}
+            storageAccountName: ${{ parameters.StorageAccountName }}
+            # location can be added here if needed, but defaults to resource group location
+            # there are skuName, kind, accessTier, etc. parameters that can be added as needed. For now just keeping it simple.
+
+      - name: DeployAzureContainerBicep
+        uses: azure/arm-deploy@v1
+        with:
+          scope: resourceGroup
+          resourceGroupName: parameters.resourceGroupName
+          deploymentName: "azure-container-${{ parameters.Environment }}"
+          template: ../modules/containers/main.bicep
+          parameters: 
+            environment: ${{ parameters.Environment }}
+            containerName: ${{ variables.containerName }}
+            containerImage: 
+            containerPort: ${{ variables.containerPort }}
+            assignUserAssignedIdentity: ${{ variables.ManagedIdentityEnabled }}
+            managedIdentityName: ${{ variables.ManagedIdentityName }}
+            environmentVariables: ${{ variables.environmentVariables }}
+            # location, cpu, memoryInGb, restartPolicy, registryServer, registryUsername, registryPassword is optional
+
+        - name: DeployRoleAssignmentsBicep
+          uses: azure/arm-deploy@v1
+          with:
+            scope: resourceGroup
+            resourceGroupName: parameters.resourceGroupName
+            deploymentName: "role-assignments-${{ parameters.Environment }}"
+            template: ../modules/role-assignments/main.bicep
+            parameters: 
+              environment: ${{ parameters.Environment }}
+              storageAccountName: ${{ parameters.StorageAccountName }}
+              managedIdentityName: ${{ parameters.ManagedIdentityName }}
+              # location can be added here if needed, but defaults to resource group location

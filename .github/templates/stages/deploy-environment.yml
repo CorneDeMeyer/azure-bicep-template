@@ -1,0 +1,17 @@
+parameters:
+  - name: Environment
+    type: string
+  - name: buildConfiguration
+    type: string
+  - name: artifactName
+    type: string
+  - name: timeoutMinutes
+    type: number
+
+# Load Environment Variables
+variables:
+  - template: ../variables/${{ parameters.Environment }}.yml
+    parameters:
+      Environment: ${{ parameters.Environment }}
+
+jobs:

@@ -1,0 +1,120 @@
+trigger: none
+# Scheduled pipeline to run at 05:00 Mon-Fri
+schedules:
+  - cron: "0 5 * * 1-5"      # minute hour day month day-of-week (runs Mon-Fri at 05:00)
+    displayName: "Daily Build every Weekday at 05:00"
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+# Parameters
+parameters:
+  - name: CleanCheckout
+    displayName: 'Clean Checkout'
+    type: boolean
+    default: false
+
+# Variables are defined here, to use in this file and in templates
+variables:
+  isMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+  
+stages:
+# Step 1: Checkout the repository
+  - stage: CheckoutLatest
+    displayName: 'Checkout Latest Code'
+    jobs:
+      - job: DetectChanges
+        displayName: 'Checkout Code'
+        steps:
+          - checkout: self 
+            clean: ${{ parameters.CleanCheckout }}
+
+# Step 2: Validate Infra and Codebase
+  - stage: ValidateCodebase
+    displayName: 'Validate Codebase'
+    dependsOn: [ CheckoutLatest ]
+    jobs:
+      - template: .azuredevops/templates/stages/validate-codebase.yml
+        parameters:
+          Environment: dev
+          validateAngularCodeBase: false
+
+  # Step 3: Build Solution
+  - stage: BuildSolution
+    displayName: 'Build Solution'
+    dependsOn: [ ValidateCodebase ]
+    jobs:
+      - template: .azuredevops/templates/stages/build-solution.yml
+        parameters:
+          vmImage: ${{ variables.vmImage }}
+          buildConfiguration: ${{ variables.buildConfiguration }}
+          artifactName: ${{ variables.artifactName }}
+          timeoutMinutes: ${{ variables.timeoutMinutes }}
+
+# Dev Deployment Stage
+  - stage: DeployDev
+    displayName: 'Deploy Dev'
+    dependsOn: [ DetectChanges, ValidateCodebase ]
+    jobs:
+      - template: .azuredevops/templates/stages/deploy-environment.yml
+        parameters:
+          Environment: Dev
+          buildConfiguration: ${{ variables.buildConfiguration }}
+          artifactName: ${{ variables.artifactName }}
+          timeoutMinutes: ${{ variables.timeoutMinutes }}
+
+# Test Deployment Stage
+  - stage: DeployTest
+    displayName: 'Deploy Test'
+    dependsOn: [ DeployDev, isMain ]
+    jobs:
+      - template: .azuredevops/templates/stages/deploy-environment.yml
+        parameters:
+          Environment: Test
+          vmImage: ${{ variables.vmImage }}
+          buildConfiguration: ${{ variables.buildConfiguration }}
+          artifactName: ${{ variables.artifactName }}
+          timeoutMinutes: ${{ variables.timeoutMinutes }}
+
+# Non-Prod Deployment Stage
+  - stage: DeployNonProd
+    displayName: 'Deploy NonProd'
+    dependsOn: [ DeployTest ]
+    jobs:
+      - template: .azuredevops/templates/stages/deploy-environment.yml
+        parameters:
+          Environment: nonprod
+          vmImage: ${{ variables.vmImage }}
+          buildConfiguration: ${{ variables.buildConfiguration }}
+          artifactName: ${{ variables.artifactName }}
+          timeoutMinutes: ${{ variables.timeoutMinutes }}
+
+# Here you will need to apply a automated step to wait for an approval to continue to Prod
+
+# Prod Deployment Stage
+  - stage: DeployProd
+    displayName: 'Deploy Prod'
+    dependsOn: [ DeployNonProd ] # WaitingForProdApproval ]
+    jobs:
+      - job: WaitForApproval
+        displayName: 'Await Manual Approval'
+        steps:
+          - task: ManualValidation@0
+            inputs:
+              notifyUsers: 'corne.demeyer@entelect.co.za'   # more than 1 approver, use comma-separated emails
+              instructions: 'Please review and approve deployment to Prod.'
+              timeout: '4320'
+              onTimeout: 'reject'
+
+      - template: .azuredevops/templates/stages/deploy-environment.yml
+        dependsOn: WaitForApproval
+        parameters:
+          Environment: prod
+          vmImage: ${{ variables.vmImage }}
+          buildConfiguration: ${{ variables.buildConfiguration }}
+          artifactName: ${{ variables.artifactName }}
+          timeoutMinutes: ${{ variables.timeoutMinutes }}
